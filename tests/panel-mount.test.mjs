@@ -118,3 +118,56 @@ test('clicking the trigger opens the panel and the trigger survives', async () =
 
   root.unmount()
 })
+
+test('disabled state keeps the globe and offers one-click re-enable', async () => {
+  const settingsForm = {
+    getSnapshot: () => ({
+      status: 'ready',
+      writable: true,
+      value: { publicHostname: '', gateHost: '127.0.0.1', autoTunnel: false, enabled: false },
+    }),
+    subscribe: () => () => {},
+    set: (field, value) => {
+      settingsForm.lastSet = { field, value }
+      return Promise.resolve(true)
+    },
+    lastSet: undefined,
+  }
+
+  let registered = undefined
+  const ctx = {
+    locale: { register: () => () => {}, bind: () => undefined },
+    configForms: { get: () => settingsForm },
+    slots: {
+      inject: (hole, setup) => setup(),
+      register: (options, Component) => {
+        registered = { options, Component }
+        return () => {}
+      },
+    },
+    effect: (fn) => fn(),
+    get: () => undefined,
+  }
+  moduleExports.apply(ctx)
+
+  const root = reactDomClient.createRoot(document.getElementById('root'))
+  root.render(createElement(registered.Component, { wide: true }))
+  await sleep(30)
+  // The globe must STAY even when remote access is disabled — otherwise the
+  // toggle removes its own entry point (dead end).
+  const trigger = document.querySelector('[data-tunnel-gate-trigger]')
+  assert.ok(trigger, 'the globe stays visible while remote access is off')
+
+  trigger.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+  await sleep(120)
+  const panel = document.querySelector('[data-tunnel-gate-panel]')
+  assert.ok(panel, 'the panel opens while disabled')
+  const enableBtn = [...panel.querySelectorAll('button')].find((b) => /重新启用|re-enable/i.test(b.textContent))
+  assert.ok(enableBtn, 'a one-click re-enable control is offered')
+
+  enableBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }))
+  await sleep(60)
+  assert.deepEqual(settingsForm.lastSet, { field: 'enabled', value: true }, 're-enable writes enabled=true')
+
+  root.unmount()
+})

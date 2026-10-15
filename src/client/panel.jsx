@@ -59,6 +59,8 @@ const DICT = {
   expire: '有效期',
   cooldown: '冷却中',
   close: '关闭',
+  disabledBanner: '远程访问当前已关闭',
+  reEnable: '重新启用',
 }
 
 /** Small helper: localized text with fallback. */
@@ -281,6 +283,13 @@ function Panel({ t, onClose }) {
         <span style={S.spacer} />
         <button type="button" className='tg-btn' onClick={onClose} aria-label={t('close')}>✕</button>
       </div>
+
+      {!formEnabled(settingsForm) && (
+        <div style={{ ...S.row, marginBottom: 8, padding: '8px 10px', border: '1px solid var(--dsw-alias-state-warn-primary)', borderRadius: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--dsw-alias-state-warn-primary)', flex: 1 }}>{t('disabledBanner')}</span>
+          <button type="button" className='tg-btn' onClick={() => void writeField('enabled', true)}>{t('reEnable')}</button>
+        </div>
+      )}
 
       {error && <div style={{ ...S.hint, color: 'var(--dsw-alias-state-error-primary)', marginBottom: 8 }}>{t('unreachable')}</div>}
 

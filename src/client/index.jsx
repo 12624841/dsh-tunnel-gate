@@ -50,6 +50,8 @@ const zh = {
   expire: '有效期',
   cooldown: '冷却中',
   close: '关闭',
+  disabledBanner: '远程访问当前已关闭',
+  reEnable: '重新启用',
 }
 
 /** English fallback dictionary. */
@@ -93,6 +95,8 @@ const en = {
   expire: 'expires in',
   cooldown: 'Cooling down',
   close: 'Close',
+  disabledBanner: 'Remote access is currently off',
+  reEnable: 'Re-enable',
 }
 
 /** Services required by this plugin. */
@@ -176,39 +180,17 @@ export function apply(ctx) {
   }
   ctx.effect(() => () => style?.remove?.(), 'tunnel-gate-client: styles')
 
-  // Sidebar foot seat: the trigger beside the settings button. Registration
-  // follows the enabled flag so a settings-card toggle adds/removes the entry.
+  // Sidebar foot seat: the trigger is ALWAYS registered — hiding it when
+  // remote access is off would remove the only way back into the panel.
+  // The disabled state is shown inside the panel with a one-click re-enable.
   ctx.slots?.inject?.('sidebar.footer.action', () => {
     let disposeEntry
-    const enabled = () => {
-      const snapshot = settingsForm?.getSnapshot?.()
-      return snapshot?.status !== 'ready' || snapshot.value?.enabled !== false
-    }
-    const syncEntry = () => {
-      if (enabled() && disposeEntry === undefined) {
-        try {
-          disposeEntry = ctx.slots.register({ name: 'sidebar.footer.action', id: NS, locale: NS }, FooterEntry)
-        } catch {
-          // Registration collision during a reload: the older entry still owns it.
-        }
-      } else if (!enabled() && disposeEntry !== undefined) {
-        try {
-          disposeEntry()
-        } catch {}
-        disposeEntry = undefined
-      }
-    }
-    let unsubscribe
     try {
-      unsubscribe = settingsForm?.subscribe?.(syncEntry)
+      disposeEntry = ctx.slots.register({ name: 'sidebar.footer.action', id: NS, locale: NS }, FooterEntry)
     } catch {
-      unsubscribe = undefined
+      // Registration collision during a reload: the older entry still owns it.
     }
-    syncEntry()
     return () => {
-      try {
-        unsubscribe?.()
-      } catch {}
       try {
         disposeEntry?.()
       } catch {}
