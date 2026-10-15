@@ -270,7 +270,7 @@ function Panel({ t, onClose }) {
   const cooling = status?.cooldownUntil !== undefined && Date.now() < status.cooldownUntil
   const coolingLeft = cooling ? countdownLabel(status.cooldownUntil, Date.now()) : ''
   /** Up-front access decision: the harness keeps the config plane local. */
-  const access = settingsAccess(settingsForm, window.location.hostname)
+  const access = settingsAccess(settingsForm, window.location)
   /** The config echo: host-side truth wins over the (possibly unavailable) form snapshot. */
   const cfgEcho = { ...(access.value ?? {}), ...(status?.config ?? {}) }
 

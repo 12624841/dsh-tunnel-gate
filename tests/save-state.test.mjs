@@ -99,3 +99,19 @@ test('settingsAccess: a writable form on a loopback page is editable', () => {
   assert.equal(access.mode, 'editable')
   assert.equal(access.value.gateHost, '127.0.0.1')
 })
+
+test('settingsAccess: the desktop shell (file://, dsh-app://) is LOCAL and editable', () => {
+  const snapshot = {
+    status: 'ready',
+    writable: true,
+    value: { publicHostname: '', gateHost: '127.0.0.1', enabled: true },
+  }
+  assert.equal(settingsAccess(formOf(snapshot), { hostname: '', protocol: 'file:' }).mode, 'editable')
+  assert.equal(settingsAccess(formOf(snapshot), { hostname: 'dsh-app', protocol: 'dsh-app:' }).mode, 'editable')
+})
+
+test('settingsAccess: LAN and tunnel pages stay read-only (object form)', () => {
+  const snapshot = { status: 'ready', writable: true, value: {} }
+  assert.equal(settingsAccess(formOf(snapshot), { hostname: '192.0.2.22', protocol: 'http:' }).mode, 'readonly')
+  assert.equal(settingsAccess(formOf(snapshot), { hostname: 'remote.example.com', protocol: 'https:' }).mode, 'readonly')
+})
