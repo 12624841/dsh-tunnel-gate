@@ -16,6 +16,7 @@
  * code; `stop()` kills the child and is safe to call repeatedly.
  */
 import { spawn as nodeSpawn } from 'node:child_process'
+import { homedir } from 'node:os'
 
 /** Command line for a named tunnel (the token rides the env, never argv). */
 export function namedTunnelArgs() {
@@ -115,15 +116,17 @@ export class TunnelManager {
     })
     this.#child = child
     this.#watchChild(child, seq)
+    // Readiness probe: a failure here usually means the CLOUDFLARE-side
+    // origin config is wrong (the 1033 lesson) — cloudflared itself is
+    // registered and healthy, so NEVER kill it over this. Surface the
+    // warning and keep the connection alive.
     try {
       await this.#probeUntilReady(this.#publicUrl, seq)
     } catch (error) {
-      if (seq === this.#startSeq) {
-        this.#state = 'error'
-        this.#error = error instanceof Error ? error.message : String(error)
-      }
-      await this.#killChild()
-      throw error
+      if (seq !== this.#startSeq) throw new Error('superseded')
+      this.#state = 'running'
+      this.#error = `隧道已连接，但就绪探测未通过（${error instanceof Error ? error.message : String(error)}）——请检查 Cloudflare 控制台里该域名的回源地址是否指向 http://localhost:${String(this.#gatePort)}`
+      return this.state()
     }
     if (seq !== this.#startSeq) throw new Error('superseded')
     this.#state = 'running'
@@ -235,13 +238,40 @@ export class TunnelManager {
 }
 
 /**
+ * Pick the cloudflared binary: the npm package's bin (a string or a list of
+ * candidates) first, then a known on-disk fallback (dsh-pocket ships one).
+ * @param pkgBin - the `cloudflared` npm package's bin export.
+ * @param fallbackBin - absolute path of a known existing binary.
+ * @param exists - existence predicate (injected for tests).
+ * @returns the first existing candidate, else the npm bin's first entry.
+ */
+export function pickCloudflaredBin(pkgBin, fallbackBin, exists = (p) => typeof p === 'string' && p.length > 0) {
+  const candidates = [...(Array.isArray(pkgBin) ? pkgBin : [pkgBin]), fallbackBin]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate !== '' && exists(candidate)) return candidate
+  }
+  return Array.isArray(pkgBin) ? pkgBin[0] : pkgBin
+}
+
+/**
  * Default binary seam: resolve the platform cloudflared binary through the
  * `cloudflared` npm package, downloading it when the postinstall was skipped.
+ * A previously downloaded binary (e.g. under $DSH_HOME/dsh-pocket/bin) wins
+ * over a fresh download.
  * @returns the absolute binary path.
  */
 async function defaultEnsureBinary() {
-  const cloudflared = await import('cloudflared')
   const { existsSync } = await import('node:fs')
-  if (!existsSync(cloudflared.bin)) await cloudflared.install()
-  return cloudflared.bin
+  const { join } = await import('node:path')
+  const cloudflared = await import('cloudflared')
+  const fallback = join(dshPocketBin(), 'cloudflared')
+  const bin = pickCloudflaredBin(cloudflared.bin, fallback, existsSync)
+  if (!existsSync(bin)) await cloudflared.install()
+  return bin
+}
+
+/** The dsh-pocket bin directory (a known cloudflared download location). */
+function dshPocketBin() {
+  const home = process.env.DSH_HOME?.trim().replace(/\/$/, '') || homedir()
+  return `${home}/.dsh/dsh-pocket/bin`
 }

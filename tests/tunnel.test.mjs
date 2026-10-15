@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { TunnelManager, namedTunnelArgs, quickTunnelArgs } from '../src/tunnel.js'
+import { TunnelManager, namedTunnelArgs, quickTunnelArgs, pickCloudflaredBin } from '../src/tunnel.js'
 
 /** A controllable fake child process. */
 function fakeChild() {
@@ -91,15 +91,28 @@ test('startNamed passes the token via env, never argv, and probes to running', a
   assert.deepEqual(manager.state(), { mode: 'named', state: 'running', publicUrl: 'https://dsh.example.com', error: undefined })
 })
 
-test('startNamed reports an error when the tunnel never becomes reachable', async () => {
-  const { manager } = makeManager({ probe: async () => { throw new Error('unreachable') } })
-  await assert.rejects(
-    () => manager.startNamed('token', 'dsh.example.com'),
-    /unreachable|readiness/,
-  )
-  assert.equal(manager.state().state, 'error')
-  // A failed start must not leave a live child behind.
-  await manager.stop()
+test('probe failure keeps the child alive and surfaces a warning (1033 lesson)', async () => {
+  const children = []
+  const capturing = new TunnelManager({
+    gatePort: 16177,
+    ensureBinary: async () => '/fake/cloudflared',
+    spawn: () => {
+      const spawned = fakeChild()
+      children.push(spawned)
+      queueMicrotask(() => spawned.emit('spawn'))
+      return spawned
+    },
+    probe: async () => { throw new Error('unreachable') },
+    probeIntervalMs: 1,
+    probeTimeoutMs: 50,
+  })
+  await capturing.startNamed('token', 'dsh.example.com')
+  // cloudflared itself registers with the edge fine — a wrong origin config
+  // makes the probe fail. Killing it would strand the domain (error 1033).
+  assert.equal(capturing.state().state, 'running')
+  assert.match(capturing.state().error ?? '', /回源|probe|unreachable|dsh\.example\.com/i)
+  assert.ok(children[0] && !children[0].killed, 'the child must NOT be killed on probe failure')
+  await capturing.stop()
 })
 
 test('a crashed child flips the state to stopped with the exit code', async () => {
@@ -182,4 +195,15 @@ test('starting again while running restarts the old child first', async () => {
   assert.equal(children[0].killed, true, 'the previous child was killed')
   assert.equal(manager.state().publicUrl, 'https://b.example.com')
   await manager.stop()
+})
+
+
+
+
+test('pickCloudflaredBin prefers existing candidates and falls back in order', () => {
+  const exists = (p) => p === '/fallback/cloudflared' || p === '/npm/alt'
+  assert.equal(pickCloudflaredBin('/npm/bin', '/fallback/cloudflared', exists), '/fallback/cloudflared')
+  assert.equal(pickCloudflaredBin('/npm/alt', '/fallback/cloudflared', exists), '/npm/alt', 'npm bin 候选先于 fallback')
+  assert.equal(pickCloudflaredBin(['/npm/a', '/npm/alt'], '/fallback/cloudflared', exists), '/npm/alt', '数组形式的 bin 逐个尝试')
+  assert.equal(pickCloudflaredBin('/npm/missing', '/fallback/missing', exists), '/npm/missing', '都不存在时返回 npm bin 交给 install()')
 })
