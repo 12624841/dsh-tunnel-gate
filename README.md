@@ -41,7 +41,7 @@ Cloudflare Edge ── Tunnel（cloudflared，token 只走环境变量）
 
 ```sh
 # 方式一：从 GitHub 直接安装（lib/ 预构建产物已提交，无需本地构建）
-dsh plugin --profile web add github:zhu1090093659/dsh-tunnel-gate
+dsh plugin --profile web add github:12624841/dsh-tunnel-gate
 
 # 方式二：本地开发目录（开发循环）
 dsh plugin --profile web add link:/path/to/dsh-tunnel-gate
