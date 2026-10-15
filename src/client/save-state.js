@@ -56,6 +56,17 @@ export function savePlan(form, draft) {
 }
 
 /**
+ * Name the fields whose writes failed — the card shows them so a partial
+ * save (e.g. a rejected secret) is identifiable at a glance.
+ * @param writes - the planned writes.
+ * @param results - the per-write booleans returned by ConfigForm.set.
+ * @returns the failed field names, in plan order.
+ */
+export function failedFields(writes, results) {
+  return writes.filter((_, index) => results[index] !== true).map((write) => write.field)
+}
+
+/**
  * Decide the settings card's access mode before rendering any controls.
  * @param form - the bound ConfigForm (or undefined when the service is absent).
  * @param page - the page identity: a `location`-like `{ hostname, protocol }`

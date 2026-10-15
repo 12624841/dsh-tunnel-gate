@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { fetchStatus, postAction, copyText } from './api.js'
 import { countdownLabel, lastSeenLabel, tunnelBadge } from './format.js'
-import { SAVE_STATE, saveOutcome, savePlan, settingsAccess } from './save-state.js'
+import { SAVE_STATE, saveOutcome, savePlan, failedFields, settingsAccess } from './save-state.js'
 
 /** Built-in dictionary (zh wins at runtime via the locale seat when present). */
 export const REPO_URL = 'https://github.com/12624841/dsh-tunnel-gate'
@@ -166,6 +166,7 @@ function Panel({ t, onClose }) {
   const [showSettings, setShowSettings] = useState(false)
   const [draft, setDraft] = useState({ publicHostname: '', tunnelToken: '', autoTunnel: false, gateHost: '' })
   const [saveState, setSaveState] = useState(SAVE_STATE.idle)
+  const [failed, setFailed] = useState([])
 
   const refresh = useCallback(async () => {
     try {
@@ -240,6 +241,7 @@ function Panel({ t, onClose }) {
         }
         const outcome = saveOutcome(results)
         setSaveState(outcome)
+        setFailed(outcome === SAVE_STATE.saved ? [] : failedFields(writes, results))
         if (outcome === SAVE_STATE.saved) {
           setDraft((current) => ({ ...current, tunnelToken: '' }))
           setTimeout(() => setSaveState(SAVE_STATE.idle), 2_500)
@@ -489,7 +491,9 @@ function Panel({ t, onClose }) {
                     <span style={{ fontSize: 11, color: 'var(--dsw-alias-state-success-primary)' }}>✓ {t('saved')}</span>
                   )}
                   {saveState === SAVE_STATE.failed && (
-                    <span style={{ fontSize: 11, color: 'var(--dsw-alias-state-error-primary)' }}>✗ {t('saveFailed')}</span>
+                    <span style={{ fontSize: 11, color: 'var(--dsw-alias-state-error-primary)' }}>
+                      ✗ {t('saveFailed')}{failed.length > 0 ? `：${failed.join('、')}` : ''}
+                    </span>
                   )}
                 </div>
               </>

@@ -5,7 +5,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SAVE_STATE, saveOutcome, savePlan, settingsAccess } from '../src/client/save-state.js'
+import { SAVE_STATE, saveOutcome, savePlan, failedFields, settingsAccess } from '../src/client/save-state.js'
 
 test('saveOutcome is saved only when every attempted write succeeded', () => {
   assert.equal(saveOutcome([true, true]), SAVE_STATE.saved)
@@ -57,6 +57,18 @@ test('savePlan includes the gate bind host when filled', () => {
     { field: 'autoTunnel', value: false },
     { field: 'gateHost', value: '0.0.0.0' },
   ])
+})
+
+test('failedFields names the writes that failed', () => {
+  const writes = [
+    { field: 'publicHostname', value: 'x' },
+    { field: 'tunnelToken', value: 'tok' },
+    { field: 'autoTunnel', value: true },
+  ]
+  const results = [true, false, true]
+  assert.deepEqual(failedFields(writes, results), ['tunnelToken'])
+  assert.deepEqual(failedFields(writes, [false, false, true]), ['publicHostname', 'tunnelToken'])
+  assert.deepEqual(failedFields(writes, [true, true, true]), [])
 })
 
 /** A ConfigForm double with the given snapshot. */
