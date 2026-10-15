@@ -269,10 +269,10 @@ function Panel({ t, onClose }) {
   /** Brute-force cooldown: the whole gate refuses pairing while this runs. */
   const cooling = status?.cooldownUntil !== undefined && Date.now() < status.cooldownUntil
   const coolingLeft = cooling ? countdownLabel(status.cooldownUntil, Date.now()) : ''
-  /** The config echo: host-side truth wins over the (possibly unavailable) form snapshot. */
-  const cfgEcho = { ...(access.value ?? {}), ...(status?.config ?? {}) }
   /** Up-front access decision: the harness keeps the config plane local. */
   const access = settingsAccess(settingsForm, window.location.hostname)
+  /** The config echo: host-side truth wins over the (possibly unavailable) form snapshot. */
+  const cfgEcho = { ...(access.value ?? {}), ...(status?.config ?? {}) }
 
   return (
     <div style={{ width: 330, maxHeight: '72vh', overflowY: 'auto' }} role="dialog" aria-label={t('title')}>
