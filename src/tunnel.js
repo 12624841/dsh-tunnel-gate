@@ -274,7 +274,14 @@ async function defaultEnsureBinary() {
   const cloudflared = await import('cloudflared')
   const fallback = join(dshPocketBin(), 'cloudflared')
   const bin = pickCloudflaredBin(cloudflared.bin, fallback, existsSync)
-  if (!existsSync(bin)) await cloudflared.install()
+  if (!existsSync(bin)) {
+    try {
+      await cloudflared.install()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`cloudflared 二进制下载失败（${message}）。可从任一可用机器拷贝一份到 ${fallback} 后重试`)
+    }
+  }
   return bin
 }
 
