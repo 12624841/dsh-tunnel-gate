@@ -1,0 +1,59 @@
+{
+  "name": "dsh-tunnel-gate",
+  "version": "0.1.0",
+  "description": "Cloudflare tunnel gate for DeepSeek Harness: a loopback-only gate server on 127.0.0.1:16177 pairs devices with a rotating 6-digit code, manages a revocable device roster, and reverse-proxies paired traffic to the local DSH web GUI — the official Web GUI, served through your own fixed Cloudflare tunnel hostname.",
+  "type": "module",
+  "icon": "icon.svg",
+  "license": "MIT",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "lib",
+    "scripts",
+    "cordis.patch.yml",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.0-rc.2"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "pretest": "node scripts/dev-link.mjs || true",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cloudflared": "^0.7.3",
+    "qrcode.react": "^4.2.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1 <5",
+    "@deepseek-ai/schemastery": "^3.18.0",
+    "react": ">=18.2.0 <19",
+    "react-dom": ">=18.2.0 <19"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}

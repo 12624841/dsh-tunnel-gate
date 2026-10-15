@@ -1,0 +1,11 @@
+# One package: the tunnel-gate plugin. Install it into a dsh profile
+# (`dsh plugin --profile web add link:/path/to/dsh-tunnel-gate`) — the patch
+# layer below inserts the single plugin row that mounts BOTH halves: the host
+# side (the 127.0.0.1:16177 gate server, pairing service, cloudflared tunnel,
+# reverse proxy to the DSH web server) and the browser side (the sidebar
+# entry, pairing-code panel, device roster, and settings card, served from
+# this package's lib/client.js).
+
+- insert:
+    - id: tunnel-gate
+      name: dsh-tunnel-gate
