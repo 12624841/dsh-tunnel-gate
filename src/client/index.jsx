@@ -12,6 +12,8 @@ const NS = 'tunnel-gate'
 /** The zh-CN dictionary (the primary surface language). */
 const zh = {
   title: '远程隧道',
+  disclaimer: '公网暴露有风险：请保管好配对码，及时断开不用的设备',
+  github: 'GitHub',
   pairCard: '设备配对',
   codeHint: '在手机上打开配对链接并输入此码；配对码每 60 秒轮换。',
   refresh: '刷新',
@@ -53,6 +55,8 @@ const zh = {
 /** English fallback dictionary. */
 const en = {
   title: 'Remote tunnel',
+  disclaimer: 'Exposing to the internet has risks: guard your pairing code and unpair idle devices',
+  github: 'GitHub',
   pairCard: 'Pair a device',
   codeHint: 'Open the pairing link on your phone and enter this code; it rotates every 60s.',
   refresh: 'Refresh',

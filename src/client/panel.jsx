@@ -16,7 +16,12 @@ import { countdownLabel, lastSeenLabel, tunnelBadge } from './format.js'
 import { SAVE_STATE, saveOutcome, savePlan, settingsAccess } from './save-state.js'
 
 /** Built-in dictionary (zh wins at runtime via the locale seat when present). */
-const DICT = {  title: '远程隧道',
+export const REPO_URL = 'https://github.com/12624841/dsh-tunnel-gate'
+
+const DICT = {
+  title: '远程隧道',
+  disclaimer: '公网暴露有风险：请保管好配对码，及时断开不用的设备',
+  github: 'GitHub',
   pairCard: '设备配对',
   codeHint: '在手机上打开配对链接并输入此码；配对码每 60 秒轮换。',
   scanHint: '扫码打开配对页（已带上配对码）',
@@ -482,6 +487,13 @@ function Panel({ t, onClose }) {
             )}
           </div>
         )}
+        <div style={{ ...S.row, justifyContent: 'center', marginTop: 10, fontSize: 10, color: 'var(--dsw-alias-label-tertiary)', gap: 6 }}>
+          <span style={{ textAlign: 'center' }}>{t('disclaimer')}</span>
+          <span style={{ flex: 'none', opacity: 0.6 }}>·</span>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--dsw-alias-brand-primary)', textDecoration: 'none', flex: 'none' }}>
+            {t('github')}
+          </a>
+        </div>
       </div>
     </div>
   )
