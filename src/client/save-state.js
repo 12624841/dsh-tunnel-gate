@@ -40,14 +40,16 @@ export function saveOutcome(results) {
 export function savePlan(form, draft) {
   if (form === undefined) return []
   const writes = []
-  if (typeof draft?.publicHostname === 'string' && draft.publicHostname.trim() !== '') {
+  // 域名/监听地址：空值也写入（= 真正清空）；Token 例外——空表示保留已存密钥
+  // （secret 在回显时被隐藏，空不代表用户想清掉它）。
+  if (typeof draft?.publicHostname === 'string') {
     writes.push({ field: 'publicHostname', value: draft.publicHostname.trim() })
   }
   if (typeof draft?.tunnelToken === 'string' && draft.tunnelToken.trim() !== '') {
     writes.push({ field: 'tunnelToken', value: draft.tunnelToken.trim() })
   }
   writes.push({ field: 'autoTunnel', value: draft?.autoTunnel === true })
-  if (typeof draft?.gateHost === 'string' && draft.gateHost.trim() !== '') {
+  if (typeof draft?.gateHost === 'string') {
     writes.push({ field: 'gateHost', value: draft.gateHost.trim() })
   }
   return writes

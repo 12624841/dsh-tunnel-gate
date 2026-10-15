@@ -29,17 +29,31 @@ test('savePlan attempts filled fields plus the autoTunnel flag', () => {
     { field: 'publicHostname', value: 'dsh.example.com' },
     { field: 'tunnelToken', value: 'tok' },
     { field: 'autoTunnel', value: true },
+    { field: 'gateHost', value: '' },
   ])
 })
 
-test('savePlan skips empty hostname/token but always writes autoTunnel', () => {
-  const writes = savePlan({}, { publicHostname: '', tunnelToken: '', autoTunnel: false })
-  assert.deepEqual(writes, [{ field: 'autoTunnel', value: false }])
+test('savePlan clears an emptied hostname/gateHost by writing the empty value', () => {
+  const writes = savePlan({}, { publicHostname: '', tunnelToken: '', autoTunnel: false, gateHost: '' })
+  assert.deepEqual(writes, [
+    { field: 'publicHostname', value: '' },
+    { field: 'autoTunnel', value: false },
+    { field: 'gateHost', value: '' },
+  ], '清空 = 真正写入空值（token 例外：空 = 保留已存密钥）')
+})
+
+test('savePlan skips only the token when left empty (redacted — keep stored secret)', () => {
+  const writes = savePlan({}, { publicHostname: 'x', tunnelToken: '   ', autoTunnel: false })
+  assert.deepEqual(writes, [
+    { field: 'publicHostname', value: 'x' },
+    { field: 'autoTunnel', value: false },
+  ])
 })
 
 test('savePlan includes the gate bind host when filled', () => {
   const writes = savePlan({}, { publicHostname: '', tunnelToken: '', autoTunnel: false, gateHost: ' 0.0.0.0 ' })
   assert.deepEqual(writes, [
+    { field: 'publicHostname', value: '' },
     { field: 'autoTunnel', value: false },
     { field: 'gateHost', value: '0.0.0.0' },
   ])
