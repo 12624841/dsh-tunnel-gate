@@ -40,14 +40,18 @@ Cloudflare Edge ── Tunnel（cloudflared，token 只走环境变量）
 ## 安装
 
 ```sh
-# 开发循环：从本地目录安装（link 形式）
+# 方式一：从 GitHub 直接安装（lib/ 预构建产物已提交，无需本地构建）
+dsh plugin --profile web add github:zhu1090093659/dsh-tunnel-gate
+
+# 方式二：本地开发目录（开发循环）
 dsh plugin --profile web add link:/path/to/dsh-tunnel-gate
 
 # 然后重启 profile
 dsh web
 ```
 
-> 发布为 npm 包后可直接 `dsh plugin --profile web add dsh-tunnel-gate@<version>`。
+> 首次启动隧道时 `cloudflared` 二进制会自动下载（pnpm 若拦截其 postinstall 也不影响，运行时兜底下载）。
+> 发布为 npm 包后可改用 `dsh plugin --profile web add dsh-tunnel-gate@<version>`。
 
 ## 配置 Cloudflare 固定域名（一次性）
 
