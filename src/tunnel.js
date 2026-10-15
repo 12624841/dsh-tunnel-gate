@@ -253,8 +253,8 @@ export class TunnelManager {
  * @param exists - existence predicate (injected for tests).
  * @returns the first existing candidate, else the npm bin's first entry.
  */
-export function pickCloudflaredBin(pkgBin, fallbackBin, exists = (p) => typeof p === 'string' && p.length > 0) {
-  const candidates = [...(Array.isArray(pkgBin) ? pkgBin : [pkgBin]), fallbackBin]
+export function pickCloudflaredBin(pkgBin, fallbackBin, exists = (p) => typeof p === 'string' && p.length > 0, whichCandidates = []) {
+  const candidates = [...(Array.isArray(pkgBin) ? pkgBin : [pkgBin]), ...whichCandidates, fallbackBin]
   for (const candidate of candidates) {
     if (typeof candidate === 'string' && candidate !== '' && exists(candidate)) return candidate
   }
@@ -273,7 +273,13 @@ async function defaultEnsureBinary() {
   const { join } = await import('node:path')
   const cloudflared = await import('cloudflared')
   const fallback = join(dshPocketBin(), 'cloudflared')
-  const bin = pickCloudflaredBin(cloudflared.bin, fallback, existsSync)
+  // A self-installed cloudflared (brew / manual) on PATH is used as-is.
+  let whichHits = []
+  try {
+    const { execFileSync } = await import('node:child_process')
+    whichHits = [execFileSync('/usr/bin/which', ['cloudflared'], { encoding: 'utf8' }).trim()]
+  } catch {}
+  const bin = pickCloudflaredBin(cloudflared.bin, fallback, existsSync, whichHits)
   if (!existsSync(bin)) {
     try {
       await cloudflared.install()

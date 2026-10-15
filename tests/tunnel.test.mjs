@@ -208,6 +208,20 @@ test('starting again while running restarts the old child first', async () => {
 
 
 
+test('pickCloudflaredBin tries a self-installed cloudflared (which hit) before the pocket fallback', () => {
+  const exists = (p) => p === '/opt/homebrew/bin/cloudflared'
+  assert.equal(
+    pickCloudflaredBin('/npm/missing', '/pocket/missing', exists, ['/opt/homebrew/bin/cloudflared']),
+    '/opt/homebrew/bin/cloudflared',
+    '自行安装（brew/手动）的 cloudflared 直接可用',
+  )
+  assert.equal(
+    pickCloudflaredBin('/npm/missing', '/pocket/missing', exists, []),
+    '/npm/missing',
+    '没有 which 结果时保持原顺序（返回 npm bin 交给 install 下载）',
+  )
+})
+
 test('pickCloudflaredBin prefers existing candidates and falls back in order', () => {
   const exists = (p) => p === '/fallback/cloudflared' || p === '/npm/alt'
   assert.equal(pickCloudflaredBin('/npm/bin', '/fallback/cloudflared', exists), '/fallback/cloudflared')
