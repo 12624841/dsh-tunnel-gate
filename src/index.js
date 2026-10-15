@@ -184,7 +184,17 @@ function applyImpl(ctx, config) {
       return tunnel.state()
     }
     log(`starting ${mode} tunnel${mode === 'named' ? ` for ${cfg.publicHostname}` : ''}`)
-    return mode === 'named' ? tunnel.startNamed(cfg.tunnelToken, cfg.publicHostname) : tunnel.startQuick()
+    try {
+      const state = mode === 'named'
+        ? await tunnel.startNamed(cfg.tunnelToken, cfg.publicHostname)
+        : await tunnel.startQuick()
+      tunnel.note(undefined)
+      return state
+    } catch (error) {
+      // Surface the reason on the panel (state stays 'stopped').
+      tunnel.note(`启动失败: ${error instanceof Error ? error.message : String(error)}`)
+      return tunnel.state()
+    }
   }
 
   /** One reconciliation pass over live settings. */

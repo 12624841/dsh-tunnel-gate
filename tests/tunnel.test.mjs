@@ -91,6 +91,14 @@ test('startNamed passes the token via env, never argv, and probes to running', a
   assert.deepEqual(manager.state(), { mode: 'named', state: 'running', publicUrl: 'https://dsh.example.com', error: undefined })
 })
 
+test('note() surfaces operator-facing failures without changing the run state', () => {
+  const { manager } = makeManager()
+  assert.equal(manager.state().error, undefined)
+  manager.note('启动失败: cloudflared binary missing')
+  assert.equal(manager.state().state, 'stopped', 'the run state is unchanged')
+  assert.match(manager.state().error ?? '', /启动失败/)
+})
+
 test('probe failure keeps the child alive and surfaces a warning (1033 lesson)', async () => {
   const children = []
   const capturing = new TunnelManager({

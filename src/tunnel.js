@@ -80,6 +80,14 @@ export class TunnelManager {
     return { mode: this.#mode, state: this.#state, publicUrl: this.#publicUrl, error: this.#error }
   }
 
+  /**
+   * Record an operator-facing failure without changing the run state — the
+   * panel renders it so a failed start is visible beyond the host console.
+   */
+  note(message) {
+    this.#error = message
+  }
+
   /** Whether a child is currently owned. */
   get running() {
     return this.#child !== undefined
