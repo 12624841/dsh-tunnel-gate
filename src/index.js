@@ -141,7 +141,7 @@ function applyImpl(ctx, config) {
   let gateUp = false
   const gateRunning = () => gateUp
   let gateStartedPort = undefined
-  let gateStartedHost = '127.0.0.1'
+  let gateStartedHost = '0.0.0.0'
 
   async function startGate(port, host) {
     if (gateUp && gateStartedPort === port && gateStartedHost === host) return
@@ -223,7 +223,7 @@ function applyImpl(ctx, config) {
         await gate.stop()
         gateUp = false
         gateStartedPort = undefined
-        gateStartedHost = '127.0.0.1'
+        gateStartedHost = '0.0.0.0'
       }
     } finally {
       syncing = false

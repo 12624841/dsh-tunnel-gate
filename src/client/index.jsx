@@ -153,6 +153,7 @@ const STYLE_TEXT = `
  * @param ctx - client root context (slots, locale, configForms injected).
  */
 export function apply(ctx) {
+  window.__TG_DEBUG_CTX = ctx
   // Dictionaries: best-effort — the panel carries a built-in zh fallback.
   try {
     ctx.locale?.register?.(NS, { zh, en })
@@ -184,12 +185,11 @@ export function apply(ctx) {
   // remote access is off would remove the only way back into the panel.
   // The disabled state is shown inside the panel with a one-click re-enable.
   ctx.slots?.inject?.('sidebar.footer.action', () => {
-    let disposeEntry
+      let disposeEntry
     try {
       disposeEntry = ctx.slots.register({ name: 'sidebar.footer.action', id: NS, locale: NS }, FooterEntry)
-    } catch {
-      // Registration collision during a reload: the older entry still owns it.
-    }
+    } catch (e) {
+        }
     return () => {
       try {
         disposeEntry?.()

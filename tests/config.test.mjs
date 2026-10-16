@@ -42,9 +42,9 @@ test('normalizeBindHost maps localhost to 127.0.0.1', () => {
   assert.equal(normalizeBindHost('  localhost  '), '127.0.0.1')
 })
 
-test('normalizeBindHost falls back to 127.0.0.1 on garbage', () => {
-  assert.equal(normalizeBindHost(''), '127.0.0.1')
-  assert.equal(normalizeBindHost('999.1.1.1'), '127.0.0.1')
-  assert.equal(normalizeBindHost('dsh.example.com'), '127.0.0.1', 'bind addresses are IPs, not hostnames')
-  assert.equal(normalizeBindHost(undefined), '127.0.0.1')
+test('normalizeBindHost falls back to the 0.0.0.0 default on garbage (LAN by default)', () => {
+  assert.equal(normalizeBindHost(''), '0.0.0.0')
+  assert.equal(normalizeBindHost('999.1.1.1'), '0.0.0.0')
+  assert.equal(normalizeBindHost('dsh.example.com'), '0.0.0.0', 'bind addresses are IPs, not hostnames')
+  assert.equal(normalizeBindHost(undefined), '0.0.0.0')
 })

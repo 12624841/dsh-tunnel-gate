@@ -15,7 +15,7 @@ export const DEFAULTS = Object.freeze({
   enabled: true,
   publicHostname: '',
   tunnelToken: '',
-  gateHost: '127.0.0.1',
+  gateHost: '0.0.0.0',
   gatePort: 16177,
   autoTunnel: false,
   codeWindowMs: 60_000,
@@ -50,18 +50,20 @@ export function normalizeOrigin(value) {
 
 /**
  * Normalize a user-typed gate bind address: an IP literal (IPv4/IPv6),
- * `0.0.0.0` (all interfaces), `*`, or `localhost` (→ 127.0.0.1). Anything
- * else falls back to `127.0.0.1` — bind addresses are IPs, not hostnames.
+ * `0.0.0.0` (all interfaces, the default), `*`, or `localhost` (→ 127.0.0.1).
+ * Anything else falls back to `0.0.0.0` — bind addresses are IPs, not
+ * hostnames. LAN exposure is the intended default; the pairing code stays
+ * the door.
  * @param value - raw settings input.
  * @returns the normalized bind address.
  */
 export function normalizeBindHost(value) {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : ''
-  if (raw === '') return '127.0.0.1'
+  if (raw === '') return '0.0.0.0'
   if (raw === '*' || raw === 'any') return '0.0.0.0'
   if (raw === 'localhost') return '127.0.0.1'
   const host = raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw
-  return netIsIP(host) !== 0 ? host : '127.0.0.1'
+  return netIsIP(host) !== 0 ? host : '0.0.0.0'
 }
 
 /** net.isIP without importing at module top (kept beside the other helpers). */
@@ -78,7 +80,7 @@ export const Config = z
     /** Master switch: stops the gate server and the tunnel when false. */
     enabled: z.boolean().default(DEFAULTS.enabled).volatile(),
     /** Gate bind address: 127.0.0.1 (default), 0.0.0.0, or a LAN IP. */
-    gateHost: z.string().default('127.0.0.1').volatile(),
+    gateHost: z.string().default('0.0.0.0').volatile(),
     /** LAN access: bind the gate to 0.0.0.0 so intranet devices can pair directly. */
     lanAccess: z.boolean().default(false).volatile(),
     /** Fixed public hostname of the Cloudflare tunnel, e.g. dsh.example.com. */

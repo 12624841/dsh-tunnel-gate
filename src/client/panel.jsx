@@ -8,7 +8,7 @@
  * per the client stack rules. Text is zh-CN with a tiny built-in dictionary
  * (the locale seat's `t` wins when the shell supplies one).
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { QRCodeSVG } from 'qrcode.react'
 import { fetchStatus, postAction, copyText } from './api.js'
@@ -102,6 +102,34 @@ function GateIcon() {
       <path d="M12 3a13.5 13.5 0 0 1 0 18 13.5 13.5 0 0 1 0-18z" />
     </svg>
   )
+}
+
+/** Error boundary: a render error inside the panel is CONTAINED — shown as
+ * text inside the popover, never taking the sidebar globe down with it. */
+class PanelBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { error: undefined }
+  }
+
+  static getDerivedStateFromError(error) {
+    console.error('[tunnel-gate] BOUNDARY CAUGHT:', error?.message ?? error)
+    return { error }
+  }
+
+  componentDidCatch(error) {
+    console.error('[tunnel-gate] panel render error:', error)
+  }
+
+  render() {
+    if (this.state.error !== undefined) {
+      const message = this.state.error?.message ?? String(this.state.error)
+      return createElement('div', {
+        style: { fontSize: 11, color: 'var(--dsw-alias-state-error-primary)', whiteSpace: 'pre-wrap', padding: 8 },
+      }, `⚠ ${message}`)
+    }
+    return this.props.children
+  }
 }
 
 /**
@@ -297,47 +325,55 @@ function Panel({ t, onClose }) {
 
       <div style={S.card}>
         <div style={S.cardTitle}>{t('pairCard')}</div>
-        {status ? (
-          <>
-            <div style={S.code}>{status.code}</div>
-            <div style={{ ...S.row, justifyContent: 'center', fontSize: 11, marginBottom: 8, color: cooling ? 'var(--dsw-alias-state-warn-primary)' : 'var(--dsw-alias-label-secondary)' }}>
-              {cooling ? `${t('cooldown')} ${coolingLeft}` : `${t('expire')} ${expiry}`}
+        {/* 固定布局：码/倒计时/二维码槽始终占位，数据到达不产生任何跳动 */}
+        <div style={{ ...S.code, color: status ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-label-tertiary)' }}>
+          {status?.code ?? '······'}
+        </div>
+        <div style={{ ...S.row, justifyContent: 'center', fontSize: 11, height: 18, marginBottom: 8, color: cooling ? 'var(--dsw-alias-state-warn-primary)' : 'var(--dsw-alias-label-secondary)' }}>
+          {cooling ? `${t('cooldown')} ${coolingLeft}` : status ? `${t('expire')} ${expiry}` : t('loadingHint')}
+        </div>
+        <div data-tunnel-gate-qr-slot style={{ ...S.row, justifyContent: 'center', marginBottom: 10, height: 160 }}>
+          {status?.pairUrl ? (
+            <a
+              href={status.pairUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={t('scanHint')}
+              style={{ background: '#ffffff', borderRadius: 10, padding: 8, display: 'inline-block', lineHeight: 0 }}
+            >
+              <QRCodeSVG value={status.pairUrl} size={144} bgColor="#ffffff" fgColor="#000000" level="M" />
+            </a>
+          ) : (
+            <div
+              style={{
+                width: 160, height: 160, borderRadius: 10,
+                border: '1px dashed var(--dsw-alias-border-l2)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, color: 'var(--dsw-alias-label-tertiary)',
+              }}
+            >
+              {t('loadingHint')}
             </div>
-            {status.pairUrl && (
-              <div style={{ ...S.row, justifyContent: 'center', marginBottom: 10 }}>
-                <a
-                  href={status.pairUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={t('scanHint')}
-                  style={{ background: '#ffffff', borderRadius: 10, padding: 8, display: 'inline-block', lineHeight: 0 }}
-                >
-                  <QRCodeSVG value={status.pairUrl} size={144} bgColor="#ffffff" fgColor="#000000" level="M" />
-                </a>
-              </div>
-            )}
-            <div style={{ ...S.row, justifyContent: 'center', gap: 8 }}>
-              <button type="button" className='tg-btn' disabled={busy} onClick={() => void act(() => postAction('rotate'))}>{t('refresh')}</button>
-              <button
-                type="button"
-                className='tg-btn'
-                disabled={busy || !status.pairUrl}
-                onClick={() => {
-                  void copyText(status.pairUrl ?? '').then((ok) => {
-                    if (ok) {
-                      setCopied(true)
-                      setTimeout(() => setCopied(false), 1_500)
-                    }
-                  })
-                }}
-              >
-                {copied ? t('copied') : t('copyLink')}
-              </button>
-            </div>
-          </>
-        ) : (
-          <div style={{ ...S.hint, textAlign: 'center' }}>…</div>
-        )}
+          )}
+        </div>
+        <div style={{ ...S.row, justifyContent: 'center', gap: 8 }}>
+          <button type="button" className='tg-btn' disabled={busy || !status} onClick={() => void act(() => postAction('rotate'))}>{t('refresh')}</button>
+          <button
+            type="button"
+            className='tg-btn'
+            disabled={busy || !status?.pairUrl}
+            onClick={() => {
+              void copyText(status.pairUrl ?? '').then((ok) => {
+                if (ok) {
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1_500)
+                }
+              })
+            }}
+          >
+            {copied ? t('copied') : t('copyLink')}
+          </button>
+        </div>
       </div>
 
       <div style={S.card}>
@@ -575,7 +611,9 @@ export function FooterEntry(props = {}) {
             boxShadow: 'var(--dsw-shadow-lv3)', padding: 14,
           }}
         >
-          <Panel t={t} onClose={() => setOpen(false)} />
+          <PanelBoundary>
+            <Panel t={t} onClose={() => setOpen(false)} />
+          </PanelBoundary>
         </div>,
         document.body,
       )}
