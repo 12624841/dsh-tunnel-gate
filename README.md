@@ -143,7 +143,7 @@ s = open(p).read()
 config = """- id: tunnel-gate
   name: dsh-tunnel-gate
   config:
-    publicHostname: https://app.example.com
+    publicHostname: https://dsh.example.com
     tunnelToken: <你的隧道Token>
     gateHost: 0.0.0.0
     enabled: true
