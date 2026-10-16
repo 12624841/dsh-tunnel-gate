@@ -356,3 +356,31 @@ test('startNamed shows starting (with mode) while the binary is being prepared, 
   assert.equal(manager.state().state, 'stopped', 'a failed prepare resets the state')
   await manager.stop()
 })
+
+
+test('a child crash during the probe is NOT overwritten by a running verdict', async () => {
+  const children = []
+  const manager = new TunnelManager({
+    gatePort: 16177,
+    ensureBinary: async () => '/fake/cloudflared',
+    spawn: () => {
+      const spawned = fakeChild()
+      children.push(spawned)
+      queueMicrotask(() => spawned.emit('spawn'))
+      return spawned
+    },
+    probe: async () => { throw new Error('probe unreachable') },
+    probeIntervalMs: 1,
+    probeTimeoutMs: 40,
+  })
+  const pending = manager.startNamed('token', 'dsh.example.com')
+  // cloudflared crashes while the probe is still polling.
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  children[0].crash(1)
+  // The probe eventually times out — it must NOT flip the crashed state to running.
+  await Promise.race([pending, new Promise((resolve) => setTimeout(resolve, 200))]).catch(() => {})
+  const state = manager.state()
+  assert.equal(state.state, 'stopped', 'the crash verdict stands')
+  assert.match(state.error ?? '', /exited/, 'the crash reason is preserved')
+  await manager.stop()
+})

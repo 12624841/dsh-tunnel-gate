@@ -143,6 +143,11 @@ export class TunnelManager {
       await this.#probeUntilReady(this.#publicUrl, seq)
     } catch (error) {
       if (seq !== this.#startSeq) throw new Error('superseded')
+      if (this.#child === undefined) {
+        // cloudflared crashed during the probe: watchChild already recorded
+        // stopped + exit reason — do NOT overwrite it with a running verdict.
+        return this.state()
+      }
       this.#state = 'running'
       this.#error = `隧道已连接，但就绪探测未通过（${error instanceof Error ? error.message : String(error)}）——请检查 Cloudflare 控制台里该域名的回源地址是否指向 http://localhost:${String(this.#gatePort)}`
       return this.state()
@@ -243,6 +248,11 @@ export class TunnelManager {
     let lastError = 'readiness probe failed'
     while (Date.now() < deadline) {
       if (seq !== this.#startSeq) throw new Error('superseded')
+      // cloudflared exited mid-probe: fail fast — watchChild already recorded
+      // the crash (stopped + exit reason); polling a dead process is pointless.
+      if (this.#child === undefined) {
+        throw new Error(`cloudflared exited during readiness probe (${String(this.#error ?? 'unknown')})`)
+      }
       try {
         const status = await this.#probe(url)
         if (status === 200) return
