@@ -6,7 +6,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
-import { TunnelManager, namedTunnelArgs, quickTunnelArgs, pickCloudflaredBin } from '../src/tunnel.js'
+import { TunnelManager, namedTunnelArgs, quickTunnelArgs, pickCloudflaredBin, resolveBinary } from '../src/tunnel.js'
 
 /** A controllable fake child process. */
 function fakeChild() {
@@ -40,8 +40,8 @@ function makeManager({ probe = async () => 200, spawnOverrides = {} } = {}) {
   const manager = new TunnelManager({
     gatePort: 16177,
     ensureBinary: async () => '/fake/cloudflared',
-    spawn: (args, options) => {
-      calls.push({ args, options })
+    spawn: (file, args, options) => {
+      calls.push({ file, args, options })
       const spawned = Object.assign(new EventEmitter(), {
         stdout: new EventEmitter(),
         stderr: new EventEmitter(),
@@ -85,7 +85,7 @@ test('startNamed passes the token via env, never argv, and probes to running', a
   const { manager, calls } = makeManager()
   await manager.startNamed('secret-token', 'dsh.example.com')
   assert.equal(calls.length, 1)
-  assert.deepEqual(calls[0].args, ['/fake/cloudflared', ...namedTunnelArgs()])
+  assert.deepEqual(calls[0].args, namedTunnelArgs())
   assert.equal(calls[0].options.env.TUNNEL_TOKEN, 'secret-token')
   assert.ok(!calls[0].args.join(' ').includes('secret-token'), 'the token must not appear in argv')
   assert.deepEqual(manager.state(), { mode: 'named', state: 'running', publicUrl: 'https://dsh.example.com', error: undefined })
@@ -104,7 +104,7 @@ test('probe failure keeps the child alive and surfaces a warning (1033 lesson)',
   const capturing = new TunnelManager({
     gatePort: 16177,
     ensureBinary: async () => '/fake/cloudflared',
-    spawn: () => {
+    spawn: (file, args, options) => {
       const spawned = fakeChild()
       children.push(spawned)
       queueMicrotask(() => spawned.emit('spawn'))
@@ -128,7 +128,7 @@ test('a crashed child flips the state to stopped with the exit code', async () =
   const capturing = new TunnelManager({
     gatePort: 16177,
     ensureBinary: async () => '/fake/cloudflared',
-    spawn: () => {
+    spawn: (file, args, options) => {
       const spawned = fakeChild()
       children.push(spawned)
       queueMicrotask(() => spawned.emit('spawn'))
@@ -152,7 +152,7 @@ test('startNamed honors a full origin (scheme included) and defaults bare hosts'
   const capturing = new TunnelManager({
     gatePort: 16177,
     ensureBinary: async () => '/fake/cloudflared',
-    spawn: () => {
+    spawn: (file, args, options) => {
       const spawned = fakeChild()
       children.push(spawned)
       queueMicrotask(() => spawned.emit('spawn'))
@@ -228,4 +228,131 @@ test('pickCloudflaredBin prefers existing candidates and falls back in order', (
   assert.equal(pickCloudflaredBin('/npm/alt', '/fallback/cloudflared', exists), '/npm/alt', 'npm bin 候选先于 fallback')
   assert.equal(pickCloudflaredBin(['/npm/a', '/npm/alt'], '/fallback/cloudflared', exists), '/npm/alt', '数组形式的 bin 逐个尝试')
   assert.equal(pickCloudflaredBin('/npm/missing', '/fallback/missing', exists), '/npm/missing', '都不存在时返回 npm bin 交给 install()')
+})
+
+
+test('spawn seam receives (binary, args) — the real nodeSpawn contract', async () => {
+  const calls = []
+  const manager = new TunnelManager({
+    gatePort: 16177,
+    ensureBinary: async () => '/fake/cloudflared',
+    spawn: (file, args, options) => {
+      calls.push({ file, args, options })
+      const spawned = fakeChild()
+      queueMicrotask(() => spawned.emit('spawn'))
+      return spawned
+    },
+    probe: async () => 200,
+    probeIntervalMs: 1,
+    probeTimeoutMs: 50,
+  })
+  await manager.startNamed('token', 'dsh.example.com')
+  assert.equal(typeof calls[0].file, 'string', 'file must be a string (real nodeSpawn throws on arrays)')
+  assert.equal(calls[0].file, '/fake/cloudflared')
+  assert.deepEqual(calls[0].args, namedTunnelArgs())
+  await manager.stop()
+})
+
+// resolveBinary: orchestration over (pick → install → verify).
+
+const noExists = () => false
+
+test('resolveBinary installs to the resolved bin path', async () => {
+  const installed = []
+  const bin = await resolveBinary({
+    pkgBin: '/npm/cloudflared',
+    fallbackBin: '/pocket/cloudflared',
+    whichCandidates: [],
+    exists: (p) => installed.includes(p),
+    install: async (to) => { installed.push(to) },
+  })
+  assert.equal(bin, '/npm/cloudflared')
+  assert.deepEqual(installed, ['/npm/cloudflared'], 'install() receives the target path (node-cloudflared API)')
+})
+
+test('resolveBinary skips install when a candidate already exists', async () => {
+  const installed = []
+  const bin = await resolveBinary({
+    pkgBin: '/npm/cloudflared',
+    fallbackBin: '/pocket/cloudflared',
+    whichCandidates: ['/opt/homebrew/bin/cloudflared'],
+    exists: (p) => p === '/opt/homebrew/bin/cloudflared',
+    install: async (to) => { installed.push(to) },
+  })
+  assert.equal(bin, '/opt/homebrew/bin/cloudflared')
+  assert.deepEqual(installed, [])
+})
+
+test('resolveBinary survives a missing cloudflared npm package when the fallback exists', async () => {
+  const bin = await resolveBinary({
+    pkgBin: undefined,
+    fallbackBin: '/pocket/cloudflared',
+    whichCandidates: [],
+    exists: (p) => p === '/pocket/cloudflared',
+    install: undefined,
+  })
+  assert.equal(bin, '/pocket/cloudflared')
+})
+
+test('resolveBinary fails with a copy hint when nothing exists and install is unavailable', async () => {
+  await assert.rejects(
+    () => resolveBinary({ pkgBin: undefined, fallbackBin: '/pocket/x', whichCandidates: [], exists: noExists, install: undefined }),
+    /二进制缺失/,
+  )
+})
+
+test('resolveBinary times out a hung install with a copy hint', async () => {
+  await assert.rejects(
+    () => resolveBinary({
+      pkgBin: '/npm/cloudflared',
+      fallbackBin: '/pocket/cloudflared',
+      whichCandidates: [],
+      exists: noExists,
+      install: () => new Promise(() => {}),
+      installTimeoutMs: 20,
+    }),
+    /下载超时/,
+  )
+})
+
+test('resolveBinary wraps install failures with the copy hint', async () => {
+  await assert.rejects(
+    () => resolveBinary({
+      pkgBin: '/npm/cloudflared',
+      fallbackBin: '/pocket/cloudflared',
+      whichCandidates: [],
+      exists: noExists,
+      install: async () => { throw new Error('socket hang up') },
+      installTimeoutMs: 20,
+    }),
+    /下载失败（socket hang up）[\s\S]*可从任一可用机器拷贝/,
+  )
+})
+
+test('startNamed shows starting (with mode) while the binary is being prepared, and stops cleanly on failure', async () => {
+  const children = []
+  const manager = new TunnelManager({
+    gatePort: 16177,
+    ensureBinary: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30))
+      throw new Error('download failed')
+    },
+    spawn: (file, args, options) => {
+      const spawned = fakeChild()
+      children.push(spawned)
+      queueMicrotask(() => spawned.emit('spawn'))
+      return spawned
+    },
+    probe: async () => 200,
+    probeIntervalMs: 1,
+    probeTimeoutMs: 50,
+  })
+  const pending = manager.startNamed('token', 'dsh.example.com')
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  const during = manager.state()
+  assert.equal(during.mode, 'named', 'the mode is visible during the download')
+  assert.equal(during.state, 'starting', 'the state is visible during the download')
+  await assert.rejects(() => pending, /download failed/)
+  assert.equal(manager.state().state, 'stopped', 'a failed prepare resets the state')
+  await manager.stop()
 })

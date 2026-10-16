@@ -113,8 +113,51 @@ tests/            # node:test 套件
 scripts/          # build.mjs（esbuild 工厂包装）/ dev-link.mjs（peer 链接）
 ```
 
+## cloudflared 二进制与排查
+
+**二进制解析顺序**（启动隧道时依次尝试，命中即用）：
+
+1. `cloudflared` npm 包内置路径（安装时若允许了构建脚本则已就位）
+2. **PATH 里的 `cloudflared`**（brew / 手动安装的均可）
+3. `~/.dsh/dsh-pocket/bin/cloudflared`（共享缓存位置）
+4. 都没有 → 自动下载（120 秒超时；受限网络建议手动放置到位置 3）
+
+**常见故障对照**：
+
+| 症状 | 原因 | 处理 |
+|---|---|---|
+| 面板显示「启动失败: connect ETIMEDOUT …」 | GitHub 下载二进制超时 | 从任一可用机器拷贝 `cloudflared` 到 `~/.dsh/dsh-pocket/bin/`，点「重启隧道」 |
+| 公网访问报 **Cloudflare 1033** | 隧道无活跃连接（cloudflared 没跑/刚被杀） | 面板点「重启隧道」；若反复出现，检查 CF 控制台回源地址 |
+| 隧道「运行中」但域名仍打不开 | CF 控制台**回源地址**不是 `http://localhost:16177` | Zero Trust → Tunnels → 该域名的 Service 改为 `http://localhost:16177` |
+| 面板红字「Provided Tunnel token is not valid」 | Token 粘贴损坏/不完整 | 重新复制完整 Token 粘贴保存 |
+| 保存设置提示「配置条目不可写」 | 插件条目未持久化（旧版安装残留） | 更新插件后重启 dsh web；或按下方「手动写持久层」处理 |
+| 配对码一直提示冷却 | 全局 6 次失败触发 30 秒防爆破冷却 | 等 30 秒，冷却结束自动换新码 |
+
+**手动写持久层**（设置写入被拒时的兜底，桌面机示例）：
+
+```sh
+python3 - <<'PY'
+import re
+p = '/Users/<你的用户名>/.dsh/profiles/<profile>/cordis.yml'
+s = open(p).read()
+config = """- id: tunnel-gate
+  name: dsh-tunnel-gate
+  config:
+    publicHostname: https://app.example.com
+    tunnelToken: <你的隧道Token>
+    gateHost: 0.0.0.0
+    enabled: true
+"""
+pattern = re.compile(r'- id: tunnel-gate\n(?:  [^\n]*\n?)*')
+s = pattern.sub(config, s, count=1) if '- id: tunnel-gate' in s else s.rstrip('\n') + '\n' + config
+open(p, 'w').write(s)
+print('✓ 已写入')
+PY
+```
+
 ## 已知边界
 
 - DSH 网页服务端口变化（`--port` 指定等）会被自动跟随；但 webserver 必须保持回环绑定（默认即是）。
 - 快速隧道模式每次重启域名都会变，配对设备需要重新配对；固定域名模式无此问题。
 - `gatePort` 修改属于结构性配置，重启 profile 后生效；其余设置项全部实时生效。
+- 隧道连接注册成功后，就绪探测失败只会降级警告、**不会杀掉 cloudflared**（回源配置错误时域名会 1033，但连接保持，改完 CF 控制台配置即自动恢复）。

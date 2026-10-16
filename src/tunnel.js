@@ -15,7 +15,7 @@
  * process. Child exit mid-run flips the state to `stopped` with the exit
  * code; `stop()` kills the child and is safe to call repeatedly.
  */
-import { spawn as nodeSpawn } from 'node:child_process'
+import { spawn as nodeSpawn, execFileSync } from 'node:child_process'
 import { homedir } from 'node:os'
 
 /** Command line for a named tunnel (the token rides the env, never argv). */
@@ -111,19 +111,30 @@ export class TunnelManager {
    * @returns the running state snapshot.
    */
   async startNamed(token, hostname) {
-    const binary = await this.#ensureBinary()
     const seq = this.#restart()
     this.#mode = 'named'
     this.#state = 'starting'
     // The settings store a full origin (scheme included); bare hosts default to https.
     this.#publicUrl = /^https?:\/\//i.test(hostname) ? hostname : `https://${hostname}`
     this.#error = undefined
-    const child = this.#spawn([binary, ...namedTunnelArgs()], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, TUNNEL_TOKEN: token },
-    })
-    this.#child = child
-    this.#watchChild(child, seq)
+    let binary
+    try {
+      binary = await this.#ensureBinary()
+    } catch (error) {
+      this.#state = 'stopped'
+      throw error
+    }
+    try {
+      const child = this.#spawn(binary, [...namedTunnelArgs()], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, TUNNEL_TOKEN: token },
+      })
+      this.#child = child
+      this.#watchChild(child, seq)
+    } catch (error) {
+      this.#state = 'stopped'
+      throw error
+    }
     // Readiness probe: a failure here usually means the CLOUDFLARE-side
     // origin config is wrong (the 1033 lesson) — cloudflared itself is
     // registered and healthy, so NEVER kill it over this. Surface the
@@ -147,13 +158,19 @@ export class TunnelManager {
    * @returns the running state snapshot.
    */
   async startQuick() {
-    const binary = await this.#ensureBinary()
     const seq = this.#restart()
     this.#mode = 'quick'
     this.#state = 'starting'
     this.#publicUrl = undefined
     this.#error = undefined
-    const child = this.#spawn([binary, ...quickTunnelArgs(this.#gatePort)], {
+    let binary
+    try {
+      binary = await this.#ensureBinary()
+    } catch (error) {
+      this.#state = 'stopped'
+      throw error
+    }
+    const child = this.#spawn(binary, [...quickTunnelArgs(this.#gatePort)], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env },
     })
@@ -268,27 +285,57 @@ export function pickCloudflaredBin(pkgBin, fallbackBin, exists = (p) => typeof p
  * over a fresh download.
  * @returns the absolute binary path.
  */
+/** Default cap for the binary download. */
+export const INSTALL_TIMEOUT_MS = 120_000
+
+/**
+ * Orchestration: pick → install (with timeout + copy hint) → verify.
+ * @returns the absolute binary path.
+ */
+export async function resolveBinary({ pkgBin, fallbackBin, whichCandidates = [], exists, install, installTimeoutMs = INSTALL_TIMEOUT_MS }) {
+  const bin = pickCloudflaredBin(pkgBin, fallbackBin, exists, whichCandidates)
+  if (exists(bin)) return bin
+  if (typeof install !== 'function') {
+    throw new Error(`cloudflared 二进制缺失，且 cloudflared npm 包不可用；请将二进制放到 ${fallbackBin}`)
+  }
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`下载超时（${String(Math.round(installTimeoutMs / 1000))}s）——受限网络下可预先将二进制放到 ${fallbackBin}`)), installTimeoutMs)
+  })
+  try {
+    await Promise.race([install(bin), timeout])
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`cloudflared 二进制下载失败（${message}）。可从任一可用机器拷贝一份到 ${fallbackBin} 后重试`)
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!exists(bin)) throw new Error(`cloudflared 二进制下载后仍不可见（${bin}）`)
+  return bin
+}
+
 async function defaultEnsureBinary() {
   const { existsSync } = await import('node:fs')
   const { join } = await import('node:path')
-  const cloudflared = await import('cloudflared')
   const fallback = join(dshPocketBin(), 'cloudflared')
-  // A self-installed cloudflared (brew / manual) on PATH is used as-is.
+  let cloudflared
+  try {
+    cloudflared = await import('cloudflared')
+  } catch {
+    // npm 包被 pnpm 修剪时，磁盘上已有的二进制仍然可用
+  }
   let whichHits = []
   try {
     const { execFileSync } = await import('node:child_process')
     whichHits = [execFileSync('/usr/bin/which', ['cloudflared'], { encoding: 'utf8' }).trim()]
   } catch {}
-  const bin = pickCloudflaredBin(cloudflared.bin, fallback, existsSync, whichHits)
-  if (!existsSync(bin)) {
-    try {
-      await cloudflared.install()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      throw new Error(`cloudflared 二进制下载失败（${message}）。可从任一可用机器拷贝一份到 ${fallback} 后重试`)
-    }
-  }
-  return bin
+  return resolveBinary({
+    pkgBin: cloudflared?.bin,
+    fallbackBin: fallback,
+    whichCandidates: whichHits,
+    exists: existsSync,
+    install: cloudflared ? (to) => cloudflared.install(to) : undefined,
+  })
 }
 
 /** The dsh-pocket bin directory (a known cloudflared download location). */
