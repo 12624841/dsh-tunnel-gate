@@ -174,8 +174,9 @@ function applyImpl(ctx, config) {
     // A local/LAN origin is unreachable from Cloudflare's edge: skip cloudflared
     // entirely — the panel still shows the link for direct access.
     const local = isLocalOrigin(cfg.publicHostname)
-    // autoTunnel 勾选 = 明确使用快速隧道（优先于 named）；named 需要域名 + Token 齐备。
-    const mode = cfg.autoTunnel && !local ? 'quick' : !local && cfg.tunnelToken !== '' && cfg.publicHostname !== '' ? 'named' : 'off'
+    const namedWanted = !local && cfg.tunnelToken !== '' && cfg.publicHostname !== ''
+    // 固定域名优先；autoTunnel 勾选 = 直接用快速隧道。
+    let mode = namedWanted && !cfg.autoTunnel ? 'named' : cfg.autoTunnel ? 'quick' : 'off'
     const key = mode === 'named' ? `named:${cfg.publicHostname}` : mode
     if (!force && key === lastTunnelKey && tunnel.state().state === 'running') return tunnel.state()
     lastTunnelKey = key
@@ -192,8 +193,20 @@ function applyImpl(ctx, config) {
       tunnel.note(undefined)
       return state
     } catch (error) {
-      // Surface the reason on the panel (state stays 'stopped').
-      tunnel.note(`启动失败: ${error instanceof Error ? error.message : String(error)}`)
+      const reason = error instanceof Error ? error.message : String(error)
+      // 固定隧道启动失败 → 快速隧道兜底（让用户始终有可用入口），面板保留原因。
+      if (mode === 'named') {
+        warn(`named tunnel 启动失败（${reason}），回退快速隧道`)
+        tunnel.note(`固定域名隧道启动失败（${reason}），已临时回退快速隧道`)
+        try {
+          const fallback = await tunnel.startQuick()
+          return fallback
+        } catch (fallbackError) {
+          tunnel.note(`启动失败: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}（named: ${reason}）`)
+          return tunnel.state()
+        }
+      }
+      tunnel.note(`启动失败: ${reason}`)
       return tunnel.state()
     }
   }
