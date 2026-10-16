@@ -234,6 +234,10 @@ export class TunnelManager {
 
   /** Wire exit/crash watching for one owned child. */
   #watchChild(child, seq) {
+    // Drain the pipes: an unconsumed full pipe buffer would block cloudflared
+    // mid-run (its logs are moderate, but a multi-day tunnel must never stall).
+    child.stdout?.on('data', () => {})
+    child.stderr?.on('data', () => {})
     child.on('exit', (code) => {
       if (this.#child !== child || seq !== this.#startSeq) return
       this.#child = undefined
