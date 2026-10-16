@@ -174,7 +174,8 @@ function applyImpl(ctx, config) {
     // A local/LAN origin is unreachable from Cloudflare's edge: skip cloudflared
     // entirely — the panel still shows the link for direct access.
     const local = isLocalOrigin(cfg.publicHostname)
-    const mode = !local && cfg.tunnelToken !== '' && cfg.publicHostname !== '' ? 'named' : cfg.autoTunnel ? 'quick' : 'off'
+    // autoTunnel 勾选 = 明确使用快速隧道（优先于 named）；named 需要域名 + Token 齐备。
+    const mode = cfg.autoTunnel && !local ? 'quick' : !local && cfg.tunnelToken !== '' && cfg.publicHostname !== '' ? 'named' : 'off'
     const key = mode === 'named' ? `named:${cfg.publicHostname}` : mode
     if (!force && key === lastTunnelKey && tunnel.state().state === 'running') return tunnel.state()
     lastTunnelKey = key

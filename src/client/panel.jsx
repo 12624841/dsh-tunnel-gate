@@ -86,6 +86,12 @@ export function provideSettingsForm(form) {
 /** The settings form in effect for this panel (explicit arg wins). */
 const formOf = (form) => form ?? activeSettingsForm
 
+/** Whether the settings snapshot carries a stored (possibly redacted) token. */
+function snapshotHasToken(form) {
+  const snapshot = formOf(form)?.getSnapshot?.()
+  return snapshot?.status === 'ready' && snapshot.value?.tunnelToken !== undefined
+}
+
 /** Read the enabled flag from the settings form (defaults true). */
 function formEnabled(form) {
   const snapshot = formOf(form)?.getSnapshot?.()
@@ -190,6 +196,7 @@ function Panel({ t, onClose }) {
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
+  const [copiedTemp, setCopiedTemp] = useState(false)
   const [tick, setTick] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
   const [draft, setDraft] = useState({ publicHostname: '', tunnelToken: '', autoTunnel: false, gateHost: '' })
@@ -382,16 +389,47 @@ function Panel({ t, onClose }) {
           <span style={S.spacer} />
           <span style={{ ...S.badge, background: `color-mix(in srgb, ${badge.color} 15%, transparent)`, color: badge.color }}>{badge.text}</span>
         </div>
-        {publicUrl ? (
+        {status?.tunnel?.publicUrl && status.tunnel.mode === 'quick' && (
           <div style={{ ...S.row, marginTop: 2 }}>
+            <span style={{ fontSize: 11, color: 'var(--dsw-alias-state-warn-primary)', flex: 'none' }}>{t('tempLabel')}</span>
             <a
-              href={publicUrl}
+              href={status.tunnel.publicUrl}
               target="_blank"
               rel="noreferrer"
-              title={publicUrl}
+              title={status.tunnel.publicUrl}
               style={{ ...S.url, textDecoration: 'none' }}
             >
-              {publicUrl.replace(/^https?:\/\//, '')}
+              {status.tunnel.publicUrl.replace(/^https?:\/\//, '')}
+            </a>
+            <span style={S.spacer} />
+            <button
+              type="button"
+              className="tg-btn"
+              disabled={copiedTemp}
+              onClick={() => {
+                void copyText(status.tunnel.publicUrl).then((ok) => {
+                  if (ok) {
+                    setCopiedTemp(true)
+                    setTimeout(() => setCopiedTemp(false), 1_500)
+                  }
+                })
+              }}
+            >
+              {copiedTemp ? t('copied') : t('copy')}
+            </button>
+          </div>
+        )}
+        {status?.publicUrl ? (
+          <div style={{ ...S.row, marginTop: 2 }}>
+            <span style={{ fontSize: 11, color: 'var(--dsw-alias-label-secondary)', flex: 'none' }}>{t('fixedLabel')}</span>
+            <a
+              href={status.publicUrl}
+              target="_blank"
+              rel="noreferrer"
+              title={status.publicUrl}
+              style={{ ...S.url, textDecoration: 'none' }}
+            >
+              {status.publicUrl.replace(/^https?:\/\//, '')}
             </a>
             <span style={S.spacer} />
             <button
@@ -399,7 +437,7 @@ function Panel({ t, onClose }) {
               className="tg-btn"
               disabled={copiedUrl}
               onClick={() => {
-                void copyText(publicUrl).then((ok) => {
+                void copyText(status.publicUrl).then((ok) => {
                   if (ok) {
                     setCopiedUrl(true)
                     setTimeout(() => setCopiedUrl(false), 1_500)
@@ -410,9 +448,9 @@ function Panel({ t, onClose }) {
               {copiedUrl ? t('copied') : t('copy')}
             </button>
           </div>
-        ) : (
+        ) : !status?.tunnel?.publicUrl ? (
           <div style={S.hint}>{t('cfHint')}</div>
-        )}
+        ) : null}
         {(status?.gate?.lanUrls ?? []).length > 0 && (
           <div style={{ marginTop: 6 }}>
             {(status?.gate?.lanUrls ?? []).map((url) => (
@@ -497,13 +535,25 @@ function Panel({ t, onClose }) {
                   value={draft.publicHostname}
                   onChange={(event) => setDraft((current) => ({ ...current, publicHostname: event.target.value }))}
                 />
-                <input
-                  style={S.input}
-                  type="password"
-                  placeholder={t('tokenPh')}
-                  value={draft.tunnelToken}
-                  onChange={(event) => setDraft((current) => ({ ...current, tunnelToken: event.target.value }))}
-                />
+                <div style={{ ...S.row, marginBottom: 8 }}>
+                  <input
+                    style={{ ...S.input, marginBottom: 0, flex: 1 }}
+                    type="password"
+                    placeholder={t('tokenPh')}
+                    value={draft.tunnelToken}
+                    onChange={(event) => setDraft((current) => ({ ...current, tunnelToken: event.target.value }))}
+                  />
+                  {snapshotHasToken(settingsForm) && (
+                    <button
+                      type="button"
+                      className="tg-btn"
+                      title={t('clearToken')}
+                      onClick={() => void writeField('tunnelToken', '')}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
                 <input
                   style={S.input}
                   placeholder={t('gateBindPh')}
