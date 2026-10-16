@@ -26,7 +26,7 @@ test('isLoopbackAddress normalizes IPv4-mapped forms', () => {
 test('isLocalOrigin detects loopback and private-LAN origins', () => {
   assert.equal(isLocalOrigin('http://localhost:16177'), true)
   assert.equal(isLocalOrigin('http://127.0.0.1:3080'), true)
-  assert.equal(isLocalOrigin('https://192.0.2.22:3080'), true)
+  assert.equal(isLocalOrigin('https://192.168.55.22:3080'), true)
   assert.equal(isLocalOrigin('http://10.0.0.5'), true)
   assert.equal(isLocalOrigin('http://172.16.0.9'), true)
   assert.equal(isLocalOrigin('localhost'), true, 'scheme-less input defaults to https and still classifies')
