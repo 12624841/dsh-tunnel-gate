@@ -114,6 +114,33 @@ test('accept with a wrong code fails as invalid and burns one attempt', () => {
   }
 })
 
+test('accept records the client IP; verify updates it when the device changes network', () => {
+  const { service, clock, cleanup } = makeService()
+  try {
+    const { cookie } = service.accept(service.status().code, {
+      clientKey: '203.0.113.7', clientIp: '203.0.113.7', userAgent: 'test',
+    })
+    assert.equal(service.status().devices[0].ip, '203.0.113.7', 'the pairing IP is recorded')
+
+    clock.advance(10_000)
+    // 同一设备换了网络（新 IP）：verify 时更新 lastIp
+    service.verify(cookie, '198.51.100.9')
+    assert.equal(service.status().devices[0].ip, '198.51.100.9', 'lastIp follows the latest network')
+  } finally {
+    cleanup()
+  }
+})
+
+test('accept without a client IP stores unknown rather than crashing', () => {
+  const { service, cleanup } = makeService()
+  try {
+    service.accept(service.status().code, { clientKey: 'x', userAgent: 'test' })
+    assert.equal(service.status().devices[0].ip, 'unknown')
+  } finally {
+    cleanup()
+  }
+})
+
 test('accept with the right code pairs a device, returns its cookie, and retires the code', () => {
   const { service, cleanup } = makeService()
   try {

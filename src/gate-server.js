@@ -112,7 +112,10 @@ export function createGateServer({ pairing, upstream, buildPairAcceptUrl }) {
   const connections = new Set()
 
   /** True when the request carries a live device credential. */
-  const paired = (req) => pairing.verify(readCookie(req.headers.cookie, DEVICE_COOKIE)) !== undefined
+  const paired = (req) => {
+    const clientIp = clientKeyOf(req)
+    return pairing.verify(readCookie(req.headers.cookie, DEVICE_COOKIE), clientIp) !== undefined
+  }
 
   /** Route one normal request. */
   const handle = (req, res) => {
@@ -132,7 +135,11 @@ export function createGateServer({ pairing, upstream, buildPairAcceptUrl }) {
         void readJsonBody(req)
           .then(async (body) => {
             const code = body && typeof body.code === 'string' ? body.code : ''
-            const result = pairing.accept(code, { userAgent: req.headers['user-agent'] })
+            const result = pairing.accept(code, {
+              clientKey: clientKeyOf(req),
+              clientIp: clientKeyOf(req),
+              userAgent: req.headers['user-agent'],
+            })
             if (!result.ok) {
               json(res, result.reason === 'cooldown' || result.reason === 'rate_limited' ? 429 : 403, { ok: false, reason: result.reason })
               return

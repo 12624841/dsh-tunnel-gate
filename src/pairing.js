@@ -206,6 +206,7 @@ export class PairingService {
         .map((device) => ({
           id: device.id,
           name: device.name,
+          ip: device.lastIp ?? device.ip ?? 'unknown',
           createdAt: device.createdAt,
           lastSeenAt: device.lastSeenAt,
           online: now - device.lastSeenAt < OFFLINE_AFTER_MS,
@@ -222,7 +223,7 @@ export class PairingService {
    * @param options.userAgent - User-Agent header for the device display name.
    * @returns `{ ok: true, cookie }` or `{ ok: false, reason }`.
    */
-  accept(code, { userAgent }) {
+  accept(code, { clientKey, clientIp, userAgent }) {
     const now = this.#clock.now()
     if (this.#cooldownUntil !== 0) {
       if (now < this.#cooldownUntil) return { ok: false, reason: 'cooldown' }
@@ -259,8 +260,10 @@ export class PairingService {
       id: this.#clock.id(),
       secretHash: sha256(secret).toString('hex'),
       name: deviceNameOf(userAgent),
+      ip: clientIp,
       createdAt: now,
       lastSeenAt: now,
+      lastIp: clientIp,
       expiresAt: now + DEVICE_MAX_AGE_MS,
     }
     this.#devices.set(device.id, device)
@@ -275,7 +278,7 @@ export class PairingService {
    * @param cookieValue - the `id.secret` cookie payload.
    * @returns the device record, or undefined.
    */
-  verify(cookieValue) {
+  verify(cookieValue, clientIp) {
     if (typeof cookieValue !== 'string') return undefined
     const dot = cookieValue.indexOf('.')
     if (dot <= 0) return undefined
@@ -294,7 +297,10 @@ export class PairingService {
     if (presented.byteLength !== stored.byteLength || !timingSafeEqual(presented, stored)) return undefined
     if (now - device.lastSeenAt > TOUCH_THROTTLE_MS) {
       device.lastSeenAt = now
-      this.#persist()
+      if (typeof clientIp === 'string' && clientIp !== '' && device.lastIp !== clientIp) {
+        device.lastIp = clientIp
+        this.#persist()
+      }
     }
     return device
   }
