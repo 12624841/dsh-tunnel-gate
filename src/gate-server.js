@@ -32,6 +32,15 @@ function readCookie(header, name) {
   return undefined
 }
 
+/** The best-effort real client key and IP: Cloudflare's injected IP, else the peer address. */
+function clientKeyOf(req) {
+  const cf = req.headers['cf-connecting-ip']
+  if (typeof cf === 'string' && cf !== '') return cf
+  const forwarded = req.headers['x-forwarded-for']
+  if (typeof forwarded === 'string' && forwarded !== '') return forwarded.split(',')[0].trim()
+  return req.socket.remoteAddress ?? 'unknown'
+}
+
 /** The public origin the caller used (honors the tunnel's forwarded proto). */
 function originOf(req) {
   const forwarded = req.headers['x-forwarded-proto']
@@ -132,14 +141,22 @@ export function createGateServer({ pairing, upstream, buildPairAcceptUrl }) {
         return
       }
       if (req.method === 'POST') {
+        console.error('[GATE-DBG] POST', pathname, 'ct =', req.headers['content-type'])
         void readJsonBody(req)
           .then(async (body) => {
+            console.error('[GATE-DBG] parsed body:', JSON.stringify(body))
             const code = body && typeof body.code === 'string' ? body.code : ''
-            const result = pairing.accept(code, {
+            let result
+            try {
+              result = pairing.accept(code, {
               clientKey: clientKeyOf(req),
               clientIp: clientKeyOf(req),
               userAgent: req.headers['user-agent'],
             })
+            } catch (acceptError) {
+              console.error('[GATE-DBG] accept THREW:', acceptError.stack)
+              throw acceptError
+            }
             if (!result.ok) {
               json(res, result.reason === 'cooldown' || result.reason === 'rate_limited' ? 429 : 403, { ok: false, reason: result.reason })
               return
